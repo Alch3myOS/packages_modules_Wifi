@@ -1597,6 +1597,28 @@ public class WifiConfigManager {
         }
     }
 
+    private void addPskForSetupWizardSaeNetworkIfNecessary(WifiConfiguration config, int uid) {
+        if (!config.isSecurityType(WifiConfiguration.SECURITY_TYPE_SAE)
+                || config.isSecurityType(WifiConfiguration.SECURITY_TYPE_PSK)) {
+            return;
+        }
+        boolean inSetup = mFrameworkFacade.getIntegerSetting(mContext,
+                Settings.Global.DEVICE_PROVISIONED, 1) == 0;
+        if (!inSetup && !mWifiPermissionsUtil.checkNetworkSetupWizardPermission(uid)) {
+            return;
+        }
+        if (!WifiConfigurationUtil.validatePassword(config.preSharedKey, true, false, false)) {
+            return;
+        }
+        try {
+            config.addSecurityParams(WifiConfiguration.SECURITY_TYPE_PSK);
+            Log.i(TAG, "Added PSK to the SAE network " + config.getProfileKey()
+                    + " saved during setup");
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "Couldn't add PSK to " + config.getProfileKey() + ": " + e.getMessage());
+        }
+    }
+
     /**
      * Add a network or update a network configuration to our database.
      * If the supplied networkId is INVALID_NETWORK_ID, we create a new empty
@@ -1677,6 +1699,7 @@ public class WifiConfigManager {
                     new NetworkUpdateResult(WifiConfiguration.INVALID_NETWORK_ID),
                     existingInternalConfig);
         }
+        addPskForSetupWizardSaeNetworkIfNecessary(newInternalConfig, uid);
 
         // Only add networks with proxy settings if the user has permission to
         if (WifiConfigurationUtil.hasProxyChanged(existingInternalConfig, newInternalConfig)
